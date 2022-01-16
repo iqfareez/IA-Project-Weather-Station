@@ -15,6 +15,7 @@
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <BlynkSimpleEsp32.h>
+#include <HTTPClient.h>
 
 #define DHTPIN 5      // Digital pin connected to the DHT sensor
 #define DHTTYPE DHT11 // DHT 11
@@ -32,17 +33,24 @@ char pass[] = "haha2021a";
 char auth[] = BLYNK_AUTH_TOKEN;
 
 BlynkTimer timer;
+HTTPClient httpClient;
+
+const char *ntpServer = "pool.ntp.org";
+const long gmtOffset_sec = 8 * 60 * 60;
+const int daylightOffset_sec = 3600;
 
 float temperature;
-float pressure;
+int pressure;
 float altitude;
 int32_t sealevelPressure;
 float reallAltitude;
 float lux;
 float dhtTemperature;
-float relativeHumidity;
+int relativeHumidity;
 
-void myTimerEvent()
+int lastSendNotif = 0;
+
+void updateSensors()
 {
   Serial.print("Temperature = ");
   temperature = bmp.readTemperature();
@@ -111,37 +119,56 @@ void myTimerEvent()
     Serial.println(F("%"));
   }
 
-  // make display without decimal point
-  int pressureInt = pressure;
+  // get time
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo))
+  {
+    Serial.println("Failed to obtain time");
+    return;
+  }
+  char timeStringBuff[50]; //50 chars should be enough
+  strftime(timeStringBuff, sizeof(timeStringBuff), "%a, %I:%M %p", &timeinfo);
 
+  // display all sensors value to the OLED display
+  display.clear();
   display.setTextAlignment(TEXT_ALIGN_LEFT);
   display.setFont(ArialMT_Plain_10);
   display.normalDisplay();
   display.drawString(0, 0, "Temperature: " + String(temperature) + " *C");
-  display.drawString(0, 10, "Pressure: " + String(pressureInt) + " Pa");
-  display.drawString(0, 20, "Altitude: " + String(altitude) + " m");
-  display.drawString(0, 30, "Light: " + String(lux) + " lx");
-  display.drawString(0, 40, "Humidity: " + String(relativeHumidity) + " %");
+  display.drawString(0, 10, "Pressure: " + String(pressure) + " Pa");
+  // display.drawString(0, 20, "Altitude: " + String(altitude) + " m");
+  display.drawString(0, 20, "Light: " + String(lux) + " lx");
+  display.drawString(0, 30, "Humidity: " + String(relativeHumidity) + " %");
+  display.drawString(0, 50, timeStringBuff);
   display.display();
+  Serial.println();
 
+  // Upload sensors value to Blynk
   Blynk.virtualWrite(V10, dhtTemperature);
   Blynk.virtualWrite(V12, lux);
   Blynk.virtualWrite(V11, relativeHumidity);
   Blynk.virtualWrite(V8, altitude);
   Blynk.virtualWrite(V14, pressure);
-  Serial.println();
-  // delay(1000);
-  display.clear();
-}
 
-// BLYNK_READ(V1)
-// {
-//   Blynk.virtualWrite(10, temperature);
-// }
+  if (lux < 10 && (timeinfo.tm_hour > 8 && timeinfo.tm_hour < 18))
+  {
+    Serial.println();
+    Serial.println("Nak hujan.");
+
+    if ((timeinfo.tm_hour - lastSendNotif) != 0)
+    {
+      Serial.println("Sending tele notif now");
+      lastSendNotif = timeinfo.tm_hour;
+      int statusCode = httpClient.GET();
+      Serial.println(statusCode);
+    }
+  }
+}
 
 BLYNK_CONNECTED()
 {
   Serial.println("Connected yuhhuu");
+  // On-board LED will turn on if Blynk in connected
   digitalWrite(LED_PIN, HIGH);
 }
 
@@ -149,6 +176,7 @@ void setup()
 {
   Serial.begin(115200);
   pinMode(LED_PIN, OUTPUT);
+
   // Initialize OLED display
   display.init();
   display.flipScreenVertically();
@@ -159,6 +187,9 @@ void setup()
 
   // iniitlize blynk
   Blynk.begin(auth, ssid, pass);
+
+  //init and get the time
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
   Wire.begin();
   // Start BMP180 Pressure sensor
@@ -191,15 +222,18 @@ void setup()
   display.drawString(0, 5, " Weather");
   display.drawString(0, 30, " Station");
   display.display();
-
-  // delay(2000);
   display.clear();
-  timer.setInterval(1000L, myTimerEvent);
+
+  httpClient.begin("https://api.telegram.org/bot2098150036:AAFKH9JNTefiljqUX59oS47S487jin2VQWc/sendMessage?chat_id=530851302&text=Rain\%20is\%20coming.\%20Pick\%20up\%20the\%20clothes\%20now.");
+
+  // Sensor updating and cloud synchronize
+  // will occur every 1 sec
+  // Avoid using delay() function!
+  timer.setInterval(1000L, updateSensors);
 }
 
 void loop()
 {
   Blynk.run();
   timer.run();
-  // Serial.println("huhu");
 }
