@@ -150,17 +150,19 @@ void updateSensors()
   Blynk.virtualWrite(V8, altitude);
   Blynk.virtualWrite(V14, pressure);
 
-  if (lux < 10 && (timeinfo.tm_hour > 8 && timeinfo.tm_hour < 18))
+  // Check if raining is coming by the light intensity
+  if ((lux < 10 && lux > 0) && (timeinfo.tm_hour > 8 && timeinfo.tm_hour < 18))
   {
-    Serial.println();
     Serial.println("Nak hujan.");
 
+    // To avoid spamming the user, tele notification
+    // will be send once an hour only
     if ((timeinfo.tm_hour - lastSendNotif) != 0)
     {
       Serial.println("Sending tele notif now");
       lastSendNotif = timeinfo.tm_hour;
       int statusCode = httpClient.GET();
-      Serial.println(statusCode);
+      Serial.println(statusCode); // expect 200
     }
   }
 }
@@ -168,7 +170,7 @@ void updateSensors()
 BLYNK_CONNECTED()
 {
   Serial.println("Connected yuhhuu");
-  // On-board LED will turn on if Blynk in connected
+  // On-board LED will turn on if Blynk successfully connected
   digitalWrite(LED_PIN, HIGH);
 }
 
