@@ -21,3 +21,5 @@ View at `src/main.cpp`. (For Arduino IDE, simply copy paste the code to the `.in
 - Blynk`@^1.0.1` _by_ blynkkk
 
 ## Images
+
+![IMG_20220116_125529](https://user-images.githubusercontent.com/60868965/149685271-2b75f48d-5597-4b73-8c67-8af865050fc0.jpg)
